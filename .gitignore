@@ -1,0 +1,28 @@
+# Local state and credentials
+.env
+.env.*
+!.env.example
+!.env.sample
+secrets/
+credentials/
+*.pem
+*.key
+*.p12
+*.pfx
+*.sqlite
+*.db
+*.zip
+*.tar
+*.7z
+
+# Python and developer state
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.vscode/
+.idea/
+.DS_Store
