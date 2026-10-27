@@ -1,0 +1,23 @@
+name: Python tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install package and test dependencies
+        run: python -m pip install -e ".[test,api]"
+      - name: Compile
+        run: python -m compileall -q quantum_quadra
+      - name: Test
+        run: python -m pytest -q
+      - name: Self-test
+        run: python -m quantum_quadra selftest

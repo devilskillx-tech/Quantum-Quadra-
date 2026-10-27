@@ -21,6 +21,6 @@ jobs:
         with:
           persist-credentials: false
       - name: Test security scanner
-        run: python3 -m unittest discover -s tests -v
+        run: python3 -m unittest discover -s tests -p test_security_scan.py -v
       - name: Scan tracked repository files
         run: python3 scripts/security_scan.py

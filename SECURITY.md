@@ -1,21 +1,19 @@
-# Quantum Quadra — Security policy
+# Security status
 
-## Status
-This repository is currently a **public bootstrap**. Do not commit non-public architecture, private prompts, data, credentials, API keys, tokens, deployment endpoints, or production configuration here.
+**Status: experimental; not approved for production.**
 
-## Reporting
-Do not publish exploit details or credentials in a public issue. Use GitHub private vulnerability reporting if the repository owner enables it, or contact the owner privately.
+This is a reconstructed implementation rather than the historical V7.3 distribution.
+It uses mandatory random 32-byte KEK, AES-GCM authenticated content and metadata,
+an HMAC audit chain, explicit scope checks and local encrypted payloads.
 
-## Operational controls (not confirmed as enabled)
-1. Change repository visibility to **Private** in Settings → General → Danger Zone if confidentiality is required.
-2. Enable two-factor authentication on the GitHub account and review authorized apps.
-3. In Settings → Actions → General, restrict workflow permissions to **Read repository contents**; require approval for third-party workflows as appropriate.
-4. Configure a branch ruleset for main: require pull requests and passing checks, restrict direct pushes and force pushes, and require review.
-5. Enable available secret scanning, push protection, dependency alerts, and private vulnerability reporting.
-6. Store secrets in GitHub Actions secrets or an approved secret manager; prefer short-lived OIDC credentials when a deployment is later approved.
-7. Keep STOP/default-deny at every execution boundary. A policy function or unit test alone is not enforcement.
+## Limitations
+- A local database and its audit log can be replaced together by an administrator.
+- PostgreSQL synchronization has **not** been certified with a live server or network failures.
+- Single-token FastAPI auth is insufficient for production multi-tenant deployments.
+- Search decrypts documents in process; no encrypted global full-text index.
+- Key storage and disaster recovery need an operational design.
+- The optional embedding model is neither downloaded nor benchmarked by this project.
 
-## Boundaries
-The accompanying workflow has read-only GitHub token permissions, no secrets, no deployments, no external service access, and runs only static security checks. Pattern-based scans are incomplete; they do not guarantee the absence of secrets.
-
-**Do not publish the private Quantum Quadra architecture until the repository's actual visibility and access controls have been independently verified.**
+## Disclosure
+Do not publish KEKs or client payloads in issues, logs or pull requests.
+Document a reproducible test case without secrets and propose a regression test.
