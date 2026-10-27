@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quantum-quadra-reconstructed"
+version = "7.3.1"
+description = "Independent security-focused QUANTUM QUADRA source reconstruction"
+requires-python = ">=3.10"
+dependencies = ["cryptography>=42"]
+
+[project.optional-dependencies]
+api = ["fastapi>=0.110", "uvicorn>=0.25"]
+postgres = ["psycopg2-binary>=2.9"]
+semantic = ["sentence-transformers>=3"]
+test = ["pytest>=8", "httpx>=0.27", "fastapi>=0.110"]
+
+[project.scripts]
+quadra = "quantum_quadra.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["quantum_quadra*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+quantum_quadra = ["*.sql"]
