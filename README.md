@@ -119,3 +119,18 @@ python -m pytest -q tests/test_certification_unit.py
 ```
 
 **No-go :** tests obligatoires ignorés en CI, rupture d'isolation, erreur d'intégrité, données perdues, ou P0/P1 non corrigés.
+
+## V7.6 — RTO/RPO de tests et règles de fusion
+
+Cette itération introduit des objectifs **de scénario**, non des SLO de production :
+- SQLite : RTO <= 10 s à partir d'une sauvegarde cohérente déjà disponible ; RPO = 0 cellule durablement acquittée présente dans la sauvegarde.
+- PostgreSQL : RTO <= 20 s à compter de la levée de la panne injectée, pour le rejeu après commit et la réhydratation d'une deuxième Edge ; RPO = 0 cellule de l'échantillon durci.
+- Rapports JSON sans charges utiles via `QUADRA_RECOVERY_REPORT_DIR`; XML pytest; refus des tests obligatoires ignorés.
+
+Les chiffres sont des **budgets exploratoires CI**. Ils ne démontrent pas un RPO temporel nul sur toutes les pannes ni une restauration opérationnelle depuis le début d'une panne longue. Un exercice SRE indépendant doit définir un RTO de service de bout en bout.
+
+### Protection de `main`
+
+Le script `python scripts/apply_main_ruleset.py` affiche la configuration proposée **sans modifier GitHub**. Une activation nécessite le rôle administrateur et une action explicite du propriétaire : `GITHUB_TOKEN=... python scripts/apply_main_ruleset.py --apply`. Vérifier ensuite dans Settings > Rules > Rulesets la présence effective des checks `release-gate` et `security` et de l'approbation obligatoire. Un simple fichier YAML dans le dépôt ne protège pas `main`.
+
+**Attention :** la branche V7.6 est empilée sur V7.5 ; on ne doit pas fusionner cette PR directement dans `main` avant ses bases et leurs revues.
