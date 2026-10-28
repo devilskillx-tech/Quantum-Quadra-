@@ -1,19 +1,26 @@
-# Security status
+# QUANTUM QUADRA — Security posture V7.4
 
-**Status: experimental; not approved for production.**
+**Experimental, not production-certified.** No real secrets are stored in this repository.
 
-This is a reconstructed implementation rather than the historical V7.3 distribution.
-It uses mandatory random 32-byte KEK, AES-GCM authenticated content and metadata,
-an HMAC audit chain, explicit scope checks and local encrypted payloads.
+## Implemented safeguards
 
-## Limitations
-- A local database and its audit log can be replaced together by an administrator.
-- PostgreSQL synchronization has **not** been certified with a live server or network failures.
-- Single-token FastAPI auth is insufficient for production multi-tenant deployments.
-- Search decrypts documents in process; no encrypted global full-text index.
-- Key storage and disaster recovery need an operational design.
-- The optional embedding model is neither downloaded nor benchmarked by this project.
+- KEK must be a random 32-byte value, supplied externally; no deterministic fallback.
+- Content is encrypted with AES-GCM; AAD authenticates scope, cell identity, logical key, kind, creator, status, revision, key version and payload digest.
+- Per-scope DEKs are wrapped under a KEK; local rotation re-encrypts cells atomically.
+- Audit trail uses a keyed HMAC chain plus a locally authenticated head/length anchor.
+- A missing audit anchor on an existing database fails closed; migration requires explicit operator approval.
+- Scope-specific reads and authenticated FastAPI routes; sync rejects conflicting versions, scope collisions and attempts to reactivate terminal states.
+- PostgreSQL sync uses encrypted payloads, remote ciphertext verification, idempotency receipts and an explicit dead-letter queue.
 
-## Disclosure
-Do not publish KEKs or client payloads in issues, logs or pull requests.
-Document a reproducible test case without secrets and propose a regression test.
+## Remaining risks
+
+1. **Full rollback**: an administrator who can restore an old copy of database and all its metadata can defeat the local audit anchor. Use remote, append-only audit checkpointing.
+2. **Compromised KEK**: HMAC and encrypted payload guarantees fail if the KEK is exposed; use a KMS/HSM and document recovery.
+3. **Plaintext metadata**: Core stores logical keys, types and scope IDs, which may reveal sensitive information; redesign schema if this is unacceptable.
+4. **Single-token API**: lacks mature multi-tenant identity, authorization policy, revocation of bearer tokens and rate limiting; not suitable for untrusted Internet.
+5. **Multi-device key rotation**: remote key distributions and disaster recovery need independent validation.
+6. **PostgreSQL**: tests on an ephemeral service are integration evidence, not proof of availability, failover, backup recovery or network partition tolerance in production.
+7. **Search**: decrypts scope documents in process; BM25 latency scales with scope size. Optional semantic model has no validated generalization or hallucination guarantee.
+8. **Legacy migrations**: explicit audit anchor migration cannot prove events missing before its execution; export/import from historical schema is not implemented.
+
+Avoid posting real keys, DSNs containing passwords, customer payloads or local databases in issues, CI logs and pull requests.
