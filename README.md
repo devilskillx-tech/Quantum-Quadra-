@@ -1,4 +1,4 @@
-# QUANTUM QUADRA 7.4.0 — Codex reconstruction
+# QUANTUM QUADRA 7.5.0 — Codex reconstruction
 
 > **Statut : expérimental, non certifié pour la production.** Reconstruction indépendante basée sur le code partagé dans la conversation, et non copie bit-à-bit d'une version historique. Les sources de la branche GitHub peuvent être relues, testées et modifiées dans Codex.
 
@@ -92,3 +92,30 @@ Jeu attendu : `documents: [{"id", "scope", "text"}]`, `queries: [{"text", "scope
 ## Limites de la version
 
 La résistance aux réécritures complètes de bases nécessite un témoin d'audit hors machine (WORM, ancre distante), un protocole multi-appareil de rotation de clés, une revue cryptographique externe, un benchmark sémantique représentatif, la gestion robuste de sauvegardes/restaurations, le contrôle d'accès SQL, et des tests de pannes réseau dans un environnement proche de la production. L'absence de ces critères interdit de qualifier cette version de « production ready ».
+
+## V7.4 release gate (current run)
+
+**Local:** 52 tests passed, 5 live PostgreSQL tests skipped (no service available).
+**CI:** must run all 5 live PostgreSQL tests against the ephemeral PostgreSQL 16 service, with zero skips.
+**Blocking policy:** no merge for P0/P1 open defects; CI success is necessary but not sufficient for production.
+**Limitations:** no chaos proxy / realistic multi-node partition test, no external WORM audit anchor, no independent security audit or representative semantic benchmark.
+
+
+## V7.5 — Certification de résilience (candidate, pas encore validée)
+
+- **Correctif CI** : 12 valeurs SQL pour les 12 colonnes de `quadra_core_cells`, identifié après l'échec réel PostgreSQL de V7.4.
+- **Crash tests** : `tests/test_certification_unit.py` (restauration SQLite, corruption et audit), `tests/test_certification_postgres.py` (CT-03 Toxiproxy, CT-04 workers réels), en complément de 5 tests PostgreSQL antérieurs.
+- **Restauration réelle** : `scripts/restore_smoke.py` réalise un snapshot SQLite avec outbox en attente, vérifie le dump/restore PostgreSQL et l'idempotence après récupération.
+- **CI** : jobs `unit-tests`, `postgres-integration`, `fault-injection`, `restore-validation` et `release-gate`. La qualification CI ne représente pas une certification de production.
+- **Environnement GitHub** : services PostgreSQL 16 + Toxiproxy ; les tests n'utilisent que des bases jetables synthétiques.
+- **Limite de CT-03** : le test Toxiproxy simule une partition au niveau de la connexion, pas une coupure arbitraire de paquet pendant chaque instruction SQL.
+- **Protection de `main`** : dans GitHub Settings > Rules > Rulesets, exiger `release-gate`, `security`, revue humaine, et empêcher les contournements. Sans ruleset effectivement activé, un job rouge n'est pas une protection de fusion.
+
+Exécution locale :
+```bash
+python -m pip install -e '.[test,api]'
+python -m pytest -q tests/test_certification_unit.py
+# Test live : QUADRA_TEST_PG_DSN=postgresql://... pytest -q tests/test_postgres_integration.py tests/test_certification_postgres.py -k 'not ct03'
+```
+
+**No-go :** tests obligatoires ignorés en CI, rupture d'isolation, erreur d'intégrité, données perdues, ou P0/P1 non corrigés.

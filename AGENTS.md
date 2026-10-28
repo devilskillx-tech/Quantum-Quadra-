@@ -33,3 +33,19 @@ python -m quantum_quadra benchmark --dataset tests/retrieval_fixture.json --k 3
 - `api.py`: authenticated single-scope FastAPI.
 - `cli.py`: administrative operations with explicit confirmation.
 - `tests/`: unit tests, simulated faults and opt-in real PostgreSQL tests.
+
+## Release gate: NO AUTOMATIC MERGE
+- Block merging on any known P0/P1 unresolved security or durability issue.
+- `unit-tests`, `postgres-integration`, and the pre-existing `security` workflow must all pass.
+- Keep PR as draft if any required integration check fails or has not run.
+- The fixture benchmark is NOT evidence that a semantic model outperforms BM25.
+- PostgreSQL GitHub Actions confirms basic transactions, not a production network-partition SLA.
+- Protect `main` via a GitHub ruleset requiring reviews and the three checks; do not assume the README or CODEOWNERS enforce protection.
+
+
+## V7.5 validation instructions for Codex
+- Preserve disposable test database guardrails and run the actual PostgreSQL integration job.
+- Do not present skipped live tests or the local 58-pass suite as proof of real PG resilience.
+- Run real `pg_dump`/`pg_restore` in CI; never use production DSNs.
+- Keep `release-gate` green and require GitHub branch ruleset before considering merge.
+- Never auto-merge or bypass human review.

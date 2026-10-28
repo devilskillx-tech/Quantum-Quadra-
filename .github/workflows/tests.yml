@@ -1,4 +1,4 @@
-name: QUADRA release gate
+name: QUADRA certification gate
 on:
   push:
     branches: [main, 'codex/**']
@@ -7,7 +7,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: quadra-${{ github.workflow }}-${{ github.ref }}
+  group: quadra-certification-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   unit-tests:
@@ -20,16 +20,23 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.11'
-      - name: Install
-        run: python -m pip install -e '.[test,api]'
-      - name: Compile
-        run: python -m compileall -q quantum_quadra
-      - name: SQLite, API, audit and simulated failures
-        run: python -m pytest -q --maxfail=1 tests/test_store.py tests/test_api.py tests/test_v74_regressions.py tests/test_sync_simulator.py tests/test_release_gate.py
-      - name: Self-test
-        run: python -m quantum_quadra selftest
-      - name: Labeled retrieval fixture (diagnostic, not semantic validation)
+      - run: python -m pip install -e '.[test,api]'
+      - run: python -m compileall -q quantum_quadra scripts
+      - name: Unit, API, crypto and SQLite restoration tests
+        run: |
+          mkdir -p test-results
+          python -m pytest -q --maxfail=1 --junitxml=test-results/unit.xml \
+            tests/test_store.py tests/test_api.py tests/test_v74_regressions.py \
+            tests/test_sync_simulator.py tests/test_release_gate.py tests/test_certification_unit.py
+      - run: python -m quantum_quadra selftest
+      - name: Diagnostic BM25 benchmark
         run: python -m quantum_quadra benchmark --dataset tests/retrieval_fixture.json --k 3
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: quadra-unit-junit
+          path: test-results/*.xml
+          if-no-files-found: warn
   postgres-integration:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -42,12 +49,13 @@ jobs:
           POSTGRES_DB: quadra_test
         ports: ['5432:5432']
         options: >-
-          --health-cmd=pg_isready
+          --health-cmd="pg_isready -U quadra_test -d quadra_test"
           --health-interval 3s
           --health-timeout 5s
           --health-retries 15
     env:
       QUADRA_TEST_PG_DSN: postgresql://quadra_test:quadra_test_password@127.0.0.1:5432/quadra_test
+      QUADRA_REQUIRE_LIVE_PG: '1'
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -55,9 +63,124 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.11'
-      - name: Install PostgreSQL driver and tests
-        run: python -m pip install -e '.[test,postgres]'
-      - name: Fail closed if integration is not configured
-        run: python -c "import os,psycopg2; assert os.getenv('QUADRA_TEST_PG_DSN'); c=psycopg2.connect(os.environ['QUADRA_TEST_PG_DSN']); c.close()"
-      - name: Five real PostgreSQL integration tests
-        run: python -m pytest -q --maxfail=1 tests/test_postgres_integration.py
+      - run: python -m pip install -e '.[test,postgres]'
+      - name: Fail closed if PostgreSQL is unavailable
+        run: python -c "import os,psycopg2; c=psycopg2.connect(os.environ['QUADRA_TEST_PG_DSN']); c.close()"
+      - name: Existing PostgreSQL tests and CT-04 concurrent workers
+        run: |
+          mkdir -p test-results
+          python -m pytest -q --maxfail=1 --junitxml=test-results/postgres.xml \
+            tests/test_postgres_integration.py tests/test_certification_postgres.py -k 'not ct03'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: quadra-postgres-junit
+          path: test-results/*.xml
+          if-no-files-found: warn
+  fault-injection:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: quadra_test
+          POSTGRES_PASSWORD: quadra_test_password
+          POSTGRES_DB: quadra_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U quadra_test -d quadra_test"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+      toxiproxy:
+        image: ghcr.io/shopify/toxiproxy:2.9.0
+        ports:
+          - '8474:8474'
+          - '8666:8666'
+    env:
+      QUADRA_TEST_PG_DSN: postgresql://quadra_test:quadra_test_password@127.0.0.1:5432/quadra_test
+      QUADRA_REQUIRE_LIVE_PG: '1'
+      QUADRA_REQUIRE_TOXIPROXY: '1'
+      QUADRA_TOXIPROXY_API: http://127.0.0.1:8474
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[test,postgres]'
+      - name: Require live PostgreSQL and Toxiproxy API
+        run: |
+          python -c "import os,psycopg2,urllib.request; c=psycopg2.connect(os.environ['QUADRA_TEST_PG_DSN']); c.close(); urllib.request.urlopen(os.environ['QUADRA_TOXIPROXY_API']+'/proxies',timeout=5)"
+      - name: CT-03 real network partition and recovery
+        run: |
+          mkdir -p test-results
+          python -m pytest -q --maxfail=1 --junitxml=test-results/fault.xml \
+            tests/test_certification_postgres.py -k ct03
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: quadra-fault-junit
+          path: test-results/*.xml
+          if-no-files-found: warn
+  restore-validation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: quadra_test
+          POSTGRES_PASSWORD: quadra_test_password
+          POSTGRES_DB: quadra_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U quadra_test -d quadra_test"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      QUADRA_TEST_PG_DSN: postgresql://quadra_test:quadra_test_password@127.0.0.1:5432/quadra_test
+      QUADRA_RESTORE_TEST_DSN: postgresql://quadra_test:quadra_test_password@127.0.0.1:5432/quadra_restore
+      PGPASSWORD: quadra_test_password
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[test,postgres]'
+      - name: Write encrypted test cells, create WAL-consistent SQLite backup
+        run: python scripts/restore_smoke.py prepare --workdir "$RUNNER_TEMP/quadra-restore"
+      - name: Actual pg_dump and pg_restore into a second disposable database
+        run: |
+          set -euo pipefail
+          docker run --rm --network host -e PGPASSWORD postgres:16 \
+            pg_dump -h 127.0.0.1 -U quadra_test -d quadra_test -Fc > "$RUNNER_TEMP/quadra-restore/core.dump"
+          test -s "$RUNNER_TEMP/quadra-restore/core.dump"
+          docker run --rm --network host -e PGPASSWORD postgres:16 \
+            createdb -h 127.0.0.1 -U quadra_test quadra_restore
+          docker run --rm --network host -e PGPASSWORD -i postgres:16 \
+            pg_restore -h 127.0.0.1 -U quadra_test -d quadra_restore < "$RUNNER_TEMP/quadra-restore/core.dump"
+      - name: Rehydrate second Edge, replay pending receipt, verify restored data
+        run: python scripts/restore_smoke.py verify --workdir "$RUNNER_TEMP/quadra-restore"
+  release-gate:
+    if: always()
+    runs-on: ubuntu-24.04
+    needs: [unit-tests, postgres-integration, fault-injection, restore-validation]
+    steps:
+      - name: Require every mandatory job to succeed (no skipped jobs)
+        env:
+          UNIT: ${{ needs.unit-tests.result }}
+          POSTGRES: ${{ needs.postgres-integration.result }}
+          FAULT: ${{ needs.fault-injection.result }}
+          RESTORE: ${{ needs.restore-validation.result }}
+        run: |
+          set -euo pipefail
+          for result in "$UNIT" "$POSTGRES" "$FAULT" "$RESTORE"; do
+            test "$result" = success || { echo "NO-GO: $result"; exit 1; }
+          done
+          echo 'GATE PASS: all mandatory CI jobs completed successfully.'
