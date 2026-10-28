@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "quantum-quadra-reconstructed"
-version = "7.3.1"
+version = "7.4.0"
 description = "Independent security-focused QUANTUM QUADRA source reconstruction"
 requires-python = ">=3.10"
 dependencies = ["cryptography>=42"]
