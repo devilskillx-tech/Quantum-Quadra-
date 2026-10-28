@@ -33,7 +33,8 @@ def live(tmp_path):
 def test_live_postgres_two_devices_and_terminal_revocation(live):
     a,b,pg,scope=live
     cid=a.put(scope,'key',{'nested':{'proof':'valid'}})
-    assert push_outbox(a,pg,scope)['pushed']==1
+    push_result = push_outbox(a,pg,scope)
+    assert push_result['pushed']==1, [dict(row) for row in a.db.execute("SELECT state,error FROM q_outbox WHERE state!='ACK'")]
     assert pull_core(b,pg,scope)['pulled']==1
     assert b.read(scope,cid)['payload']['nested']['proof']=='valid'
     a.transition(scope,cid,'REVOKED')
@@ -49,7 +50,8 @@ def test_live_postgres_replay_after_remote_commit(live):
     assert push_outbox(a,pg,scope,after_core_commit=crash)['failed']==1
     a.db.execute("UPDATE q_outbox SET next_attempt_at='1970-01-01T00:00:00+00:00'")
     a.db.commit()
-    assert push_outbox(a,pg,scope)['pushed']==1
+    push_result = push_outbox(a,pg,scope)
+    assert push_result['pushed']==1, [dict(row) for row in a.db.execute("SELECT state,error FROM q_outbox WHERE state!='ACK'")]
     with pg.cursor() as cur:
         cur.execute('SELECT COUNT(*) FROM quadra_sync_receipts WHERE scope_id=%s',(scope,))
         assert cur.fetchone()[0]==1
