@@ -1,3 +1,13 @@
+# QUANTUM QUADRA — ALL IN ONE V7.7.2 (prototype)
+
+**Lancement unique :** `python quadra_all.py doctor`, `selftest`, `demo-rollback`, `verify-formal`, `test` ou `core --help`.
+
+**Installation :** `python -m pip install -e ".[test,api]"`.
+
+**Statut : NO-GO production.** Les modèles et témoins de révocation sont expérimentaux ; aucune attestation CERT-E réelle ni protection `main` n'est activée par le package. Voir [architecture](docs/ALL_IN_ONE_ARCHITECTURE_FR.md).
+
+---
+
 # QUANTUM QUADRA 7.5.0 — Codex reconstruction
 
 > **Statut : expérimental, non certifié pour la production.** Reconstruction indépendante basée sur le code partagé dans la conversation, et non copie bit-à-bit d'une version historique. Les sources de la branche GitHub peuvent être relues, testées et modifiées dans Codex.
@@ -160,3 +170,13 @@ Live operation requires an operator-reviewed policy outside candidate control, a
 New read-only specialist roles include researcher, memory curator, audit/sync/recovery sentinels and evidence sentinel, coordinated by a fixed orchestrator. Optional Ollama model inference is loopback-only and explicitly enabled. Documentation: [`docs/AGENT_ARCHITECTURE_V77.md`](docs/AGENT_ARCHITECTURE_V77.md).
 
 The separation-of-duties checker identifies privilege overlap between developer, proof producer, verifier, policy, review and GitHub administration—including inherited grants and account aliases—on a **supplied model**. It never attests actual rights or emits `VERIFIED`. See [`docs/SEPARATION_OF_DUTIES_V77.md`](docs/SEPARATION_OF_DUTIES_V77.md). This prerequisite is fail-closed in the certification aggregator. **Production remains NO-GO** until GitHub protections, independent verifier and human governance are actually validated.
+
+
+## V7.7 — Verifiable Remediation Certificate (prototype synthétique, sans privilèges)
+
+La nouvelle chaîne `minimum_privilege_cut.py` → `authority_what_if.py` → `remediation_certificate_build.py` → `remediation_certificate_verify.py` vérifie sous contraintes les plans de **retrait seul** de permissions sur des graphes synthétiques. Elle protège les capacités de récupération, CI et approbation, et n'attribue l'optimalité qu'après un contrôle exhaustif borné. Un second étage compare la simulation aux observations fournies, **sans jamais prétendre authentifier GitHub**. L'agent consultatif `remediation_advisor.py` n'a aucun privilège d'écriture.
+
+- Documents : [`docs/VERIFIABLE_REMEDIATION_V77.md`](docs/VERIFIABLE_REMEDIATION_V77.md) et [`docs/VRC_VALIDATION_V77.md`](docs/VRC_VALIDATION_V77.md).
+- Essais : `python -m pytest -q tests/test_remediation_certificate.py tests/test_remediation_advisor.py`.
+- CI : job `remediation-certificate-tests` obligatoire pour le *candidate* `release-gate`.
+- **Pas d'autorité indépendante réelle, aucune permission GitHub modifiée, aucune décision GO.**
