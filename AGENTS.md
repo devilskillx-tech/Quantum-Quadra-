@@ -49,3 +49,9 @@ python -m quantum_quadra benchmark --dataset tests/retrieval_fixture.json --k 3
 - Run real `pg_dump`/`pg_restore` in CI; never use production DSNs.
 - Keep `release-gate` green and require GitHub branch ruleset before considering merge.
 - Never auto-merge or bypass human review.
+
+## V7.6 release objectives
+- Recovery budgets are scenario-specific and are not production SLAs.
+- Always fail closed on missing/skipped recovery tests and persist JUnit + synthetic JSON evidence.
+- The `apply_main_ruleset.py` script is **dry-run by default**; only repo owners may activate it with explicit approval.
+- Keep `main` untouched until stacked PR dependencies, ruleset and human security review pass.
