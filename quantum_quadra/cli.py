@@ -17,6 +17,9 @@ def main(argv=None):
     sub.add_parser('selftest')
     sub.add_parser('status')
     sub.add_parser('verify')
+    b=sub.add_parser('benchmark');b.add_argument('--dataset',required=True);b.add_argument('--k',type=int,default=10);b.add_argument('--mode',choices=['bm25','hybrid'],default='bm25');b.add_argument('--model-path')
+    dl=sub.add_parser('sync-requeue-dead');dl.add_argument('--scope',required=True);dl.add_argument('--confirm-local-operator',action='store_true')
+    mi=sub.add_parser('migrate-audit-anchor');mi.add_argument('--confirm-local-operator',action='store_true')
     sub.add_parser('init')
     w=sub.add_parser('write');w.add_argument('--scope',required=True);w.add_argument('--key',required=True);w.add_argument('--payload',required=True)
     r=sub.add_parser('read');r.add_argument('--scope',required=True);r.add_argument('--id',required=True)
@@ -43,6 +46,20 @@ def main(argv=None):
                 store.transition(scope,cid,'REVOKED')
                 assert store.verify_all()['valid']
         print('SELFTEST OK (SQLite local uniquement)');return 0
+    if a.cmd=='benchmark':
+        from .benchmark import evaluate_file
+        result=evaluate_file(a.dataset,a.k,a.mode,a.model_path)
+        print(json.dumps(result,indent=2,ensure_ascii=False));return 0
+    if a.cmd=='migrate-audit-anchor':
+        if not a.confirm_local_operator: p.error('migrate-audit-anchor exige --confirm-local-operator')
+        with QuadraStore(a.db, allow_legacy_audit_migration=True) as store:
+            result=store.verify_all()
+        print(json.dumps(result,ensure_ascii=False));return 0 if result['valid'] else 1
+    if a.cmd=='sync-requeue-dead':
+        if not a.confirm_local_operator: p.error('sync-requeue-dead exige --confirm-local-operator')
+        from .sync import requeue_dead
+        with QuadraStore(a.db) as store: count=requeue_dead(store,a.scope)
+        print(json.dumps({'requeued':count}));return 0
     if a.cmd=='serve':
         import uvicorn
         from .api import create_app
