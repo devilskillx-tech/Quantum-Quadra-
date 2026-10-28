@@ -1,0 +1,14 @@
+{
+  "documentation": "Toy fixture to test benchmark mechanics only. Not a claim of general retrieval quality.",
+  "documents": [
+    {"id":"a","scope":"test","text":"révocation des cellules et suppression de l'accès"},
+    {"id":"b","scope":"test","text":"rotation des clés AES-GCM et chiffrement"},
+    {"id":"c","scope":"test","text":"contrôles des transactions PostgreSQL"},
+    {"id":"other","scope":"other","text":"révocation des cellules et accès"}
+  ],
+  "queries": [
+    {"text":"rotation clés AES","scope":"test","relevant":["b"]},
+    {"text":"révocation accès","scope":"test","relevant":["a"]},
+    {"text":"transactions PostgreSQL","scope":"test","relevant":["c"]}
+  ]
+}
