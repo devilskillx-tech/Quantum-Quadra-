@@ -71,3 +71,20 @@ python -m quantum_quadra benchmark --dataset tests/retrieval_fixture.json --k 3
 - `scripts/separation_of_duties.py` detects candidate/producer/reviewer/verifier/policy/admin overlap (including aliases and group-inherited grants) from a supplied inventory; it cannot authenticate actual GitHub permissions and never certifies production.
 - An independent permissions and identities audit and protected main branch are prerequisites for CERT-A, regardless of locally passing checks.
 - Do not promote this draft stack to `main` or production without rulesets and independent reviews.
+
+
+## V7.7 MPC/VRC — règles additionnelles (prototype)
+
+- Les fichiers `scripts/minimum_privilege_cut.py`, `scripts/authority_what_if.py` et `scripts/remediation_certificate_*.py` sont des simulateurs hors ligne. Ne pas utiliser leur sortie pour autoriser une fusion ou un déploiement.
+- `MODEL_VERIFIED` ne valide ni la provenance réelle des droits GitHub, ni une application effective, ni les règles de `main`.
+- Ne pas faire de GitHub admin write, de rotation de token, de correction automatique des droits, ni de merge.
+- Les plans proposés sont des **retraits seuls**; rejeter toute revendication de couverture de privilèges non modélisés.
+- Ajouter des tests négatifs avant toute modification des formats de preuves ou règles de confiance.
+
+
+## All-in-one security amendment
+- `quadra_all.py` is a local launcher, not an authority to issue production approval.
+- Never interpret the synthetic ExternalWitness SQLite file as a deployed external trust anchor.
+- Never infer a TLC proof from `scripts/formal_mutation_runner.py`, which is a bounded Python abstraction.
+- Do not merge to main or claim governance approval from candidate CI alone.
+- Do not allow agents to revoke permissions or attest effective human independence.

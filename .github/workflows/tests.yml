@@ -258,10 +258,62 @@ jobs:
           name: quadra-agents-sod-test-evidence
           path: test-results/agents-sod.xml
           if-no-files-found: error
+  remediation-certificate-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[test]'
+      - name: Independent synthetic VRC checks and adversarial fixtures (no real GitHub grants)
+        run: |
+          mkdir -p test-results
+          python -m pytest -q --maxfail=1 --junitxml=test-results/vrc.xml \
+            tests/test_remediation_certificate.py tests/test_remediation_advisor.py
+          python scripts/assert_junit.py test-results/vrc.xml --minimum 31
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: quadra-vrc-synthetic-tests
+          path: test-results/vrc.xml
+          if-no-files-found: error
+  revocation-model-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[test]'
+      - name: Signed ledger, rollback and bounded mutation sensitivity (NOT TLC)
+        run: |
+          mkdir -p test-results
+          python -m pytest -q --maxfail=1 --junitxml=test-results/revocation-model.xml \
+            tests/test_revocation_anchor.py tests/test_formal_mutation_runner.py
+          python scripts/assert_junit.py test-results/revocation-model.xml --minimum 20
+          python quadra_all.py demo-rollback
+          python -m scripts.formal_mutation_runner > test-results/abstract-mutations.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: quadra-revocation-model-evidence
+          path: test-results/
+          if-no-files-found: error
   release-gate:
     if: always()
     runs-on: ubuntu-24.04
-    needs: [unit-tests, postgres-integration, fault-injection, restore-validation, recovery-objectives, evidence-trust-tests, agent-separation-tests]
+    needs: [unit-tests, postgres-integration, fault-injection, restore-validation, recovery-objectives, evidence-trust-tests, agent-separation-tests, remediation-certificate-tests, revocation-model-tests]
     steps:
       - name: Require every mandatory job to succeed (no skipped jobs)
         env:
@@ -272,9 +324,11 @@ jobs:
           RECOVERY: ${{ needs.recovery-objectives.result }}
           EVIDENCE: ${{ needs.evidence-trust-tests.result }}
           AGENTS_SOD: ${{ needs.agent-separation-tests.result }}
+          VRC: ${{ needs.remediation-certificate-tests.result }}
+          REVOCATION_MODEL: ${{ needs.revocation-model-tests.result }}
         run: |
           set -euo pipefail
-          for result in "$UNIT" "$POSTGRES" "$FAULT" "$RESTORE" "$RECOVERY" "$EVIDENCE" "$AGENTS_SOD"; do
+          for result in "$UNIT" "$POSTGRES" "$FAULT" "$RESTORE" "$RECOVERY" "$EVIDENCE" "$AGENTS_SOD" "$VRC" "$REVOCATION_MODEL"; do
             test "$result" = success || { echo "NO-GO: $result"; exit 1; }
           done
           echo 'GATE PASS: all mandatory CI jobs completed successfully.'

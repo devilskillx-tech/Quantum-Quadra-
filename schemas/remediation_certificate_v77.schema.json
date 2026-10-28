@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quantum-quadra.invalid/schemas/remediation_certificate_v77.schema.json",
+  "title": "QUANTUM QUADRA VRC synthetic-model certificate",
+  "description": "Offline model-only VRC. Integrity digests do not establish authentic provenance or production compliance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "repository", "candidate_commit_sha", "source_id", "source_kind", "graph_sha256", "policy_sha256", "plan", "plan_sha256", "solver_claim", "solver_cost", "certificate_sha256"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "repository": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
+    "candidate_commit_sha": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "source_id": {"type": "string", "minLength": 1, "maxLength": 120},
+    "source_kind": {"const": "SYNTHETIC_MODEL"},
+    "graph_sha256": {"$ref": "#/$defs/sha"},
+    "policy_sha256": {"$ref": "#/$defs/sha"},
+    "plan": {"type": "object", "required": ["revoke"], "additionalProperties": false,
+      "properties": {"revoke": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}}},
+    "plan_sha256": {"$ref": "#/$defs/sha"},
+    "solver_claim": {"const": "OPTIMAL"},
+    "solver_cost": {"type": "integer", "minimum": 0},
+    "certificate_sha256": {"$ref": "#/$defs/sha"}
+  },
+  "$defs": {"sha": {"type": "string", "pattern": "^[a-f0-9]{64}$"}}
+}
