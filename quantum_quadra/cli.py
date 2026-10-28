@@ -25,6 +25,7 @@ def main(argv=None):
     r=sub.add_parser('read');r.add_argument('--scope',required=True);r.add_argument('--id',required=True)
     t=sub.add_parser('revoke');t.add_argument('--scope',required=True);t.add_argument('--id',required=True)
     sr=sub.add_parser('search');sr.add_argument('--scope',required=True);sr.add_argument('--query',required=True);sr.add_argument('--mode',choices=['bm25','hybrid'],default='bm25')
+    ar=sub.add_parser('agent-run');ar.add_argument('--scope',required=True);ar.add_argument('--agent',required=True);ar.add_argument('--query',default='');ar.add_argument('--limit',type=int,default=4);ar.add_argument('--use-local-ai',action='store_true')
     cr=sub.add_parser('rotate');cr.add_argument('--scope',required=True)
     co=sub.add_parser('consolidate');co.add_argument('--scope',required=True);co.add_argument('--key',required=True)
     si=sub.add_parser('sync-init');si.add_argument('--dsn',required=True);si.add_argument('--confirm-local-operator',action='store_true')
@@ -88,6 +89,10 @@ def main(argv=None):
         elif a.cmd=='search':
             model=LocalSemanticModel(os.environ['QUADRA_SEMANTIC_MODEL_PATH']) if a.mode=='hybrid' and os.getenv('QUADRA_SEMANTIC_MODEL_PATH') else None
             result=store.search(a.scope,a.query,mode=a.mode,semantic=model)
+        elif a.cmd=='agent-run':
+            from .agents import build_local_agents
+            result=build_local_agents(store,model_name=os.getenv('QUADRA_AGENT_LOCAL_MODEL') if a.use_local_ai else None).run(
+                a.scope,a.agent,query=a.query,limit=a.limit,use_local_ai=a.use_local_ai)
         elif a.cmd=='rotate':result={'new_version':store.rotate_dek(a.scope)}
         elif a.cmd=='consolidate':result={'cell_id':store.consolidate_extractively(a.scope,a.key)}
         else:raise AssertionError(a.cmd)

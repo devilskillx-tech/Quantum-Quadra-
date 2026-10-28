@@ -13,12 +13,16 @@ from scripts.evidence_verify import GitHubProvider, verify, json_strict, Evidenc
 from scripts.github_governance_verify import audit
 
 
-def evaluate(evidence: dict, governance: dict, reviewed: bool = False) -> dict:
+def evaluate(evidence: dict, governance: dict, reviewed: bool = False, duties: dict | None = None) -> dict:
     reasons = []
     if evidence.get("status") != "VERIFIED":
         reasons.append("Evidence not VERIFIED")
     if evidence.get("scope") != "GITHUB_OBSERVED_EVIDENCE":
         reasons.append("Evidence verification scope mismatch")
+    if not isinstance(duties, dict) or duties.get("status") != "VERIFIED" or duties.get("effective_permissions") != "INDEPENDENTLY_ATTESTED":
+        reasons.append("Effective separation of duties not independently verified")
+    elif duties.get("repository") != evidence.get("repository") or duties.get("commit_sha") != evidence.get("commit_sha"):
+        reasons.append("Duty audit candidate mismatch")
     if governance.get("status") != "VERIFIED":
         reasons.append("GitHub governance not verified")
     if governance.get("repository") != evidence.get("repository"):
@@ -48,7 +52,11 @@ def main(argv=None) -> int:
         provider = GitHubProvider(token=os.getenv("GITHUB_TOKEN"))
         evidence = verify(manifest, policy, provider)
         governance = audit(provider, policy["repository"], {"release-gate", "security"})
-        result = evaluate(evidence, governance)
+        from scripts.separation_of_duties import assess
+        # A candidate-provided snapshot can never produce VERIFIED; additionally,
+        # the trusted CLI has no external source of human identity attestations.
+        duties = {"status":"UNVERIFIABLE"}
+        result = evaluate(evidence, governance, duties=duties)
     except (OSError, EvidenceError, EvidenceUnavailable, KeyError, ValueError, TypeError) as exc:
         result = {"status":"NO-GO", "production_go":False,
                   "reasons": [type(exc).__name__+": "+str(exc)]}

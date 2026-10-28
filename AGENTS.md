@@ -64,3 +64,10 @@ python -m quantum_quadra benchmark --dataset tests/retrieval_fixture.json --k 3
 - `github_governance_verify.py` returns `UNVERIFIABLE` until protected ruleset effectiveness and controlled blocked-merge test are independently demonstrated.
 - The candidate CI `release-gate` is a developer gate, **not** a production certification authority.
 - No merge to main, no ruleset activation without operator/admin authorization, no destructive tests on production.
+
+## V7.7 experimental agents + effective separation of duties
+- Agent roles in `quantum_quadra/agents.py` are advisory and scope-limited; never grant memory writes, sync, restore, token access, arbitrary tools or a GO.
+- Optional LLM is loopback-only and explicit opt-in. Outputs are always `UNVERIFIED_LOCAL_DRAFT`, never certification evidence.
+- `scripts/separation_of_duties.py` detects candidate/producer/reviewer/verifier/policy/admin overlap (including aliases and group-inherited grants) from a supplied inventory; it cannot authenticate actual GitHub permissions and never certifies production.
+- An independent permissions and identities audit and protected main branch are prerequisites for CERT-A, regardless of locally passing checks.
+- Do not promote this draft stack to `main` or production without rulesets and independent reviews.
