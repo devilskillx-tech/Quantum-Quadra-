@@ -168,7 +168,7 @@ def push_outbox(store: QuadraStore,pg_connection,scope_id: str,limit: int=50,aft
                         cur.execute('''INSERT INTO quadra_core_cells
                         (cell_id,scope_id,memory_kind,logical_key,creator_type,status,key_version,
                          revision,payload_sha256,encrypted_payload,importance,created_at)
-                        VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                        VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                         ON CONFLICT (cell_id) DO UPDATE SET
                             status=EXCLUDED.status,key_version=EXCLUDED.key_version,
                             revision=EXCLUDED.revision,payload_sha256=EXCLUDED.payload_sha256,
