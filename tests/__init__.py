@@ -1,0 +1,1 @@
+"""QUADRA integration test fixtures."""

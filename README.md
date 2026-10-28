@@ -134,3 +134,23 @@ Les chiffres sont des **budgets exploratoires CI**. Ils ne démontrent pas un RP
 Le script `python scripts/apply_main_ruleset.py` affiche la configuration proposée **sans modifier GitHub**. Une activation nécessite le rôle administrateur et une action explicite du propriétaire : `GITHUB_TOKEN=... python scripts/apply_main_ruleset.py --apply`. Vérifier ensuite dans Settings > Rules > Rulesets la présence effective des checks `release-gate` et `security` et de l'approbation obligatoire. Un simple fichier YAML dans le dépôt ne protège pas `main`.
 
 **Attention :** la branche V7.6 est empilée sur V7.5 ; on ne doit pas fusionner cette PR directement dans `main` avant ses bases et leurs revues.
+
+## V7.7 — Evidence Trust Core (experimental)
+
+New tools under `scripts/`:
+
+- `evidence_verify.py` validates a strict manifest against **fresh GitHub API metadata** and approved out-of-band workflow pins; only reports the limited `GITHUB_OBSERVED_EVIDENCE` scope.
+- `evidence_collect.py` creates an **unverified** manifest from GitHub job and artifact IDs.
+- `build_recovery_evidence.py` normalizes selected RTO/RPO measurements, rejecting missing or failed scenarios.
+- `github_governance_verify.py` reads live branch rules; even compliant configuration remains `UNVERIFIABLE` pending independent blocked-merge testing.
+- `certification_gate.py` re-verifies rather than accepting arbitrary local `PASS` files, and never grants production GO.
+
+Offline tests (including fake GitHub providers):
+
+```bash
+python -m pytest -q tests/test_evidence_security.py tests/test_trusted_pipeline.py
+```
+
+Live operation requires an operator-reviewed policy outside candidate control, a read-only GitHub token and run/job/artifact IDs from the **exact** commit. See `docs/EVIDENCE_THREAT_MODEL_V77.md` and `.github/workflows/evidence-trusted.yml` for the operator-triggered trust-pipeline blueprint.
+
+**The blueprint is NOT an active trusted pipeline or a branch ruleset.** It must run from protected `main` or, preferably, a dedicated protected certifier repository. It must not execute candidate scripts with elevated permissions. The existing V7.6 recovery tests and objectives are preserved. Production status remains NO-GO.

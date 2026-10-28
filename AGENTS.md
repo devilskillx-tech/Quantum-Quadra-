@@ -55,3 +55,12 @@ python -m quantum_quadra benchmark --dataset tests/retrieval_fixture.json --k 3
 - Always fail closed on missing/skipped recovery tests and persist JUnit + synthetic JSON evidence.
 - The `apply_main_ruleset.py` script is **dry-run by default**; only repo owners may activate it with explicit approval.
 - Keep `main` untouched until stacked PR dependencies, ruleset and human security review pass.
+
+## V7.7 evidence-certification non-negotiables
+
+- Candidate-generated evidence is untrusted, even if it contains `PASS` or a SHA-256 digest.
+- Never trust a policy stored in the candidate PR; approved policy and verifier must be pinned and controlled independently.
+- Do not use an `evidence-trust-tests` job (self-tests) as evidence that production CERT-A / CERT-B are complete.
+- `github_governance_verify.py` returns `UNVERIFIABLE` until protected ruleset effectiveness and controlled blocked-merge test are independently demonstrated.
+- The candidate CI `release-gate` is a developer gate, **not** a production certification authority.
+- No merge to main, no ruleset activation without operator/admin authorization, no destructive tests on production.
