@@ -154,3 +154,9 @@ python -m pytest -q tests/test_evidence_security.py tests/test_trusted_pipeline.
 Live operation requires an operator-reviewed policy outside candidate control, a read-only GitHub token and run/job/artifact IDs from the **exact** commit. See `docs/EVIDENCE_THREAT_MODEL_V77.md` and `.github/workflows/evidence-trusted.yml` for the operator-triggered trust-pipeline blueprint.
 
 **The blueprint is NOT an active trusted pipeline or a branch ruleset.** It must run from protected `main` or, preferably, a dedicated protected certifier repository. It must not execute candidate scripts with elevated permissions. The existing V7.6 recovery tests and objectives are preserved. Production status remains NO-GO.
+
+## V7.7 experimental agents and SoD guardrail (NOT production-certified)
+
+New read-only specialist roles include researcher, memory curator, audit/sync/recovery sentinels and evidence sentinel, coordinated by a fixed orchestrator. Optional Ollama model inference is loopback-only and explicitly enabled. Documentation: [`docs/AGENT_ARCHITECTURE_V77.md`](docs/AGENT_ARCHITECTURE_V77.md).
+
+The separation-of-duties checker identifies privilege overlap between developer, proof producer, verifier, policy, review and GitHub administration—including inherited grants and account aliases—on a **supplied model**. It never attests actual rights or emits `VERIFIED`. See [`docs/SEPARATION_OF_DUTIES_V77.md`](docs/SEPARATION_OF_DUTIES_V77.md). This prerequisite is fail-closed in the certification aggregator. **Production remains NO-GO** until GitHub protections, independent verifier and human governance are actually validated.

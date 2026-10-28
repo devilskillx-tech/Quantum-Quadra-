@@ -107,7 +107,10 @@ def test_release_gate_requires_real_governance_verified():
     governance={"repository":fixtures.REPO,"branch":"main","status":"UNVERIFIABLE"}
     assert evaluate(evidence,governance)["status"]=="NO-GO"
     governance["status"]="VERIFIED"
-    out=evaluate(evidence,governance)
+    assert evaluate(evidence, governance)["status"] == "NO-GO"
+    duties={"status":"VERIFIED", "effective_permissions":"INDEPENDENTLY_ATTESTED",
+            "repository":fixtures.REPO, "commit_sha":fixtures.COMMIT}
+    out=evaluate(evidence,governance,duties=duties)
     assert out["status"]=="TECHNICAL_PASS" and out["production_go"] is False
 
 
