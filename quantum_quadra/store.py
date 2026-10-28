@@ -1,5 +1,7 @@
 """Encrypted local-first SQLite memory store with fail-closed state authentication."""
 import hashlib
+import math
+from functools import wraps
 import hmac
 import json
 import os
@@ -56,9 +58,19 @@ CREATE TABLE IF NOT EXISTS q_audit(
 );
 """
 
+def synchronized(method):
+    """Serialize access to the shared SQLite connection, including readers."""
+    @wraps(method)
+    def wrapped(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+    return wrapped
+
+
 class QuadraStore:
-    def __init__(self, path: str, master_key: bytes | None = None):
+    def __init__(self, path: str, master_key: bytes | None = None, *, allow_legacy_audit_migration=False):
         self.path = str(path)
+        self.allow_legacy_audit_migration=allow_legacy_audit_migration
         self.kek = master_key if master_key is not None else master_key_from_env()
         if len(self.kek) != 32:
             raise ValueError("Clé maître de 32 octets requise")
@@ -71,6 +83,7 @@ class QuadraStore:
         self.db.executescript(SCHEMA)
         self._verify_master()
 
+    @synchronized
     def close(self):
         self.db.close()
 
@@ -102,7 +115,26 @@ class QuadraStore:
             if row and not hmac.compare_digest(row[0], marker):
                 raise IntegrityError("Mauvaise clé maître pour cette base")
             if row is None:
+                existing_data=any(self.db.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0]
+                                  for table in ('q_cells','q_keys','q_audit'))
+                if existing_data:
+                    raise IntegrityError('Marqueur de clé absent sur une base déjà utilisée')
                 self.db.execute("INSERT INTO q_meta(name,value) VALUES('key_marker',?)", (marker,))
+            # Legacy upgrades are explicit: silently recreating a missing audit
+            # anchor would allow bypass after deleting both the tail and anchor.
+            anchor = self.db.execute("SELECT value FROM q_meta WHERE name='audit_anchor_v1'").fetchone()
+            if anchor is None:
+                if row is not None and not self.allow_legacy_audit_migration:
+                    raise IntegrityError('Ancre d’audit manquante : migration explicite nécessaire')
+                count = self.db.execute("SELECT COUNT(*) FROM q_audit").fetchone()[0]
+                tail = self.db.execute("SELECT hash FROM q_audit ORDER BY seq DESC LIMIT 1").fetchone()
+                if not count and self.db.execute("SELECT COUNT(*) FROM q_cells").fetchone()[0]:
+                    raise IntegrityError("Journal d'audit absent : migration refusée")
+                if count and not self._verify_audit_chain_only()['valid']:
+                    raise IntegrityError("Journal d'audit invalide : migration refusée")
+                self._set_audit_anchor(count, tail[0] if tail else '0'*64)
+        if not self.verify_audit()['valid']:
+            raise IntegrityError('Journal d’audit invalide à l’ouverture')
 
     def _key(self, scope_id: str, version: int | None = None):
         if version is None:
@@ -121,6 +153,14 @@ class QuadraStore:
                         (scope_id,wrap_dek(self.kek,scope_id,1,dek)))
         return dek, 1
 
+    def _set_audit_anchor(self, count: int, tail: str):
+        data = {"count": count, "tail": tail}
+        signature = hmac.new(self.kek, b"QUADRA-AUDIT-ANCHOR-v1\x00" + canonical(data),
+                             hashlib.sha256).hexdigest()
+        self.db.execute("INSERT INTO q_meta(name,value) VALUES('audit_anchor_v1',?) "
+                        "ON CONFLICT(name) DO UPDATE SET value=excluded.value",
+                        (canonical({**data, "mac": signature}).decode('utf-8'),))
+
     def _audit(self, action: str, cell_id: str | None):
         row = self.db.execute("SELECT hash FROM q_audit ORDER BY seq DESC LIMIT 1").fetchone()
         prev = row['hash'] if row else "0" * 64
@@ -129,6 +169,8 @@ class QuadraStore:
         entry_hash = hmac.new(self.kek,record,hashlib.sha256).hexdigest()
         self.db.execute("INSERT INTO q_audit(cell_id,action,ts,prev_hash,hash) VALUES(?,?,?,?,?)",
                         (cell_id,action,ts,prev,entry_hash))
+        count = self.db.execute("SELECT COUNT(*) FROM q_audit").fetchone()[0]
+        self._set_audit_anchor(count, entry_hash)
 
     @staticmethod
     def _row_dict(row):
@@ -155,6 +197,8 @@ class QuadraStore:
         if memory_kind not in VALID_KINDS or not logical_key or not isinstance(payload,dict):
             raise ValueError("Paramètres de cellule invalides")
         uuid.UUID(str(scope_id))
+        if not math.isfinite(float(importance)) or not 0.0 <= float(importance) <= 1.0:
+            raise ValueError("importance doit être un nombre fini entre 0 et 1")
         data = canonical(payload)
         cid = str(uuid.uuid4())
         row = dict(cell_id=cid,scope_id=str(scope_id),memory_kind=memory_kind,
@@ -176,6 +220,7 @@ class QuadraStore:
         self.db.execute("INSERT INTO q_outbox(event_id,cell_id,op,revision,created_at)"
                         " VALUES(?,?,?,?,?)",(str(uuid.uuid4()),cid,op,rev,self.now()))
 
+    @synchronized
     def read(self,scope_id,cell_id,allow_inactive=False):
         row=self.db.execute("SELECT * FROM q_cells WHERE scope_id=? AND cell_id=?",(str(scope_id),cell_id)).fetchone()
         if row is None:
@@ -205,6 +250,7 @@ class QuadraStore:
             self._audit(new_status,cell_id)
         return r['revision']
 
+    @synchronized
     def search(self,scope_id,query,limit=5,mode="bm25",semantic=None):
         if not 1 <= limit <= 100:
             raise ValueError("limit hors de [1,100]")
@@ -218,6 +264,7 @@ class QuadraStore:
                      memory_kind=rows[i]['memory_kind'],score=round(score,5),payload=docs[i])
                 for score,i in ranked]
 
+    @synchronized
     def consolidate_extractively(self,scope_id,logical_key,min_episodes=3):
         if min_episodes<2: raise ValueError("min_episodes doit être >= 2")
         rows=self.db.execute("SELECT * FROM q_cells WHERE scope_id=? AND logical_key=? "
@@ -248,6 +295,7 @@ class QuadraStore:
             self._audit('ROTATE_DEK',None)
         return new_ver
 
+    @synchronized
     def verify_all(self,scope_id=None):
         clause="WHERE scope_id=?" if scope_id else ""
         rows=self.db.execute(f"SELECT * FROM q_cells {clause}", (str(scope_id),) if scope_id else ()).fetchall()
@@ -256,26 +304,61 @@ class QuadraStore:
             try:self._decode(row)
             except Exception as exc:errors.append(dict(cell_id=row['cell_id'],error=str(exc)))
         audit=self.verify_audit()
+        # Global audit log cannot be selectively verified; avoid leaking the
+        # activity count of other scopes through a scope-restricted endpoint.
+        if scope_id is not None:
+            audit={"valid":audit['valid']}
         return {"valid":not errors and audit['valid'],"checked":len(rows),"errors":errors,"audit":audit}
 
-    def verify_audit(self):
-        previous='0'*64;count=0
+    def _verify_audit_chain_only(self):
+        previous = '0'*64
+        count = 0
+        last_seq = 0
         for row in self.db.execute('SELECT * FROM q_audit ORDER BY seq'):
-            expected=hmac.new(self.kek,canonical([previous,row['cell_id'],row['action'],row['ts']]),
-                              hashlib.sha256).hexdigest()
-            if row['prev_hash']!=previous or not hmac.compare_digest(expected,row['hash']):
-                return {"valid":False,"checked":count,"broken_seq":row['seq']}
-            previous=row['hash'];count+=1
-        if self.db.execute('SELECT count(*) FROM q_cells').fetchone()[0] and not count:
-            return {"valid":False,"checked":0,"reason":"missing_audit"}
-        return {"valid":True,"checked":count}
+            if int(row['seq']) != last_seq + 1:
+                return {"valid": False, "checked": count, "reason": "audit_sequence_gap"}
+            expected = hmac.new(self.kek,
+                                canonical([previous,row['cell_id'],row['action'],row['ts']]),
+                                hashlib.sha256).hexdigest()
+            if row['prev_hash'] != previous or not hmac.compare_digest(expected,row['hash']):
+                return {"valid": False, "checked": count, "broken_seq": row['seq']}
+            previous = row['hash']
+            count += 1
+            last_seq = row['seq']
+        return {"valid": True, "checked": count, "tail": previous}
 
+    @synchronized
+    def verify_audit(self):
+        report = self._verify_audit_chain_only()
+        if not report['valid']:
+            return report
+        anchor = self.db.execute("SELECT value FROM q_meta WHERE name='audit_anchor_v1'").fetchone()
+        if anchor is None:
+            return {"valid": False, "checked": report['checked'], "reason": "missing_audit_anchor"}
+        try:
+            value = json.loads(anchor[0]); data = {"count": value['count'], "tail": value['tail']}
+            mac = hmac.new(self.kek,b"QUADRA-AUDIT-ANCHOR-v1\x00" + canonical(data),
+                           hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(value['mac'], mac):
+                raise ValueError("bad mac")
+        except (ValueError,KeyError,TypeError):
+            return {"valid": False, "checked": report['checked'], "reason": "invalid_audit_anchor"}
+        if data['count'] != report['checked'] or data['tail'] != report['tail']:
+            return {"valid": False, "checked": report['checked'], "reason": "audit_head_mismatch"}
+        if self.db.execute('SELECT count(*) FROM q_cells').fetchone()[0] and not report['checked']:
+            return {"valid": False, "checked": 0, "reason": "missing_audit"}
+        return {"valid": True, "checked": report['checked']}
+
+    @synchronized
     def status(self,scope_id=None):
         if scope_id:
             cells=self.db.execute("SELECT count(*) FROM q_cells WHERE scope_id=?",(str(scope_id),)).fetchone()[0]
             pending=self.db.execute("SELECT count(*) FROM q_outbox o JOIN q_cells c ON c.cell_id=o.cell_id "
-                                    "WHERE c.scope_id=? AND o.state!='ACK'",(str(scope_id),)).fetchone()[0]
+                                    "WHERE c.scope_id=? AND o.state IN ('PENDING','LEASED')",(str(scope_id),)).fetchone()[0]
+            dead=self.db.execute("SELECT count(*) FROM q_outbox o JOIN q_cells c ON c.cell_id=o.cell_id "
+                                  "WHERE c.scope_id=? AND o.state='DEAD'",(str(scope_id),)).fetchone()[0]
         else:
             cells=self.db.execute('SELECT count(*) FROM q_cells').fetchone()[0]
-            pending=self.db.execute("SELECT count(*) FROM q_outbox WHERE state!='ACK'").fetchone()[0]
-        return {"cells":cells,"pending_events":pending,"schema":"7.3.1-reconstructed"}
+            pending=self.db.execute("SELECT count(*) FROM q_outbox WHERE state IN ('PENDING','LEASED')").fetchone()[0]
+            dead=self.db.execute("SELECT count(*) FROM q_outbox WHERE state='DEAD'").fetchone()[0]
+        return {"cells":cells,"pending_events":pending,"dead_events":dead,"schema":"7.4.0-reconstructed"}

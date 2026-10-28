@@ -16,3 +16,7 @@ build/
 *.shm
 coverage.xml
 .coverage
+
+patch_*.py
+.pytest_cache/
+*.log

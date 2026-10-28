@@ -28,7 +28,7 @@ def create_app(store=None):
         path=os.environ.get('QUADRA_EDGE_DB')
         if not path: raise RuntimeError('QUADRA_EDGE_DB manquant')
         store=QuadraStore(path)
-    app=FastAPI(title='QUANTUM QUADRA reconstructed',version='7.3.1')
+    app=FastAPI(title='QUANTUM QUADRA reconstructed',version='7.4.0')
 
     def authorized(authorization: str | None = Header(default=None)):
         if not authorization or not authorization.startswith('Bearer '):
