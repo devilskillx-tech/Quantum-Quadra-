@@ -24,3 +24,13 @@
 8. **Legacy migrations**: explicit audit anchor migration cannot prove events missing before its execution; export/import from historical schema is not implemented.
 
 Avoid posting real keys, DSNs containing passwords, customer payloads or local databases in issues, CI logs and pull requests.
+
+## Merge safety
+This repository does not rely on an unenforced textual promise: maintainers must configure
+a GitHub branch ruleset for `main` that requires reviews and the `unit-tests`,
+`postgres-integration`, and `security` status checks. Existing P0/P1 findings block merge
+even when CI is green. Do not automatically merge draft PRs.
+
+## V7.6 limits
+
+The test-only RTO/RPO budgets are scoped to local backup availability and restored dependencies, not an end-to-end SLA. GitHub branch rules must be verified as active by an owner. A successful dry-run script does not protect the repository. No production deployment is authorized by these changes.
