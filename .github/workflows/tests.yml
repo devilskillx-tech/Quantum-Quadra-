@@ -167,10 +167,51 @@ jobs:
             pg_restore -h 127.0.0.1 -U quadra_test -d quadra_restore < "$RUNNER_TEMP/quadra-restore/core.dump"
       - name: Rehydrate second Edge, replay pending receipt, verify restored data
         run: python scripts/restore_smoke.py verify --workdir "$RUNNER_TEMP/quadra-restore"
+  recovery-objectives:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: quadra_test
+          POSTGRES_PASSWORD: quadra_test_password
+          POSTGRES_DB: quadra_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U quadra_test -d quadra_test"
+          --health-interval 3s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      QUADRA_TEST_PG_DSN: postgresql://quadra_test:quadra_test_password@127.0.0.1:5432/quadra_test
+      QUADRA_REQUIRE_LIVE_PG: '1'
+      QUADRA_RTO_PG_SECONDS: '20'
+      QUADRA_RECOVERY_REPORT_DIR: test-results/recovery
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -e '.[test,postgres]'
+      - name: Measured SQLite/PostgreSQL restore gates
+        run: |
+          mkdir -p test-results/recovery
+          python -m pytest -q --maxfail=1 --junitxml=test-results/recovery.xml \
+            tests/test_recovery_objectives.py tests/test_recovery_postgres.py tests/test_assert_junit.py
+          python scripts/assert_junit.py test-results/recovery.xml --minimum 9
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: quadra-recovery-evidence
+          path: test-results/
+          if-no-files-found: error
   release-gate:
     if: always()
     runs-on: ubuntu-24.04
-    needs: [unit-tests, postgres-integration, fault-injection, restore-validation]
+    needs: [unit-tests, postgres-integration, fault-injection, restore-validation, recovery-objectives]
     steps:
       - name: Require every mandatory job to succeed (no skipped jobs)
         env:
@@ -178,9 +219,10 @@ jobs:
           POSTGRES: ${{ needs.postgres-integration.result }}
           FAULT: ${{ needs.fault-injection.result }}
           RESTORE: ${{ needs.restore-validation.result }}
+          RECOVERY: ${{ needs.recovery-objectives.result }}
         run: |
           set -euo pipefail
-          for result in "$UNIT" "$POSTGRES" "$FAULT" "$RESTORE"; do
+          for result in "$UNIT" "$POSTGRES" "$FAULT" "$RESTORE" "$RECOVERY"; do
             test "$result" = success || { echo "NO-GO: $result"; exit 1; }
           done
           echo 'GATE PASS: all mandatory CI jobs completed successfully.'
